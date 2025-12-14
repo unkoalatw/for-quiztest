@@ -51,7 +51,7 @@
         .canvas-wrapper { flex: 1; background: #e8eaed; display: flex; justify-content: center; overflow-y: auto; padding: 40px; position: relative; transition: 0.3s; }
         .canvas {
             background: white; min-height: 800px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: width 0.3s ease; position: relative; display: flex; flex-direction: column;
+            transition: width 0.3s ease; position: relative; display: flex; flex-direction: column; padding-bottom: 100px;
         }
         /* Device Modes */
         .canvas[data-mode="desktop"] { width: 100%; max-width: 1200px; }
@@ -59,11 +59,9 @@
         .canvas[data-mode="mobile"] { width: 375px; }
 
         /* Canvas Elements */
-        .drop-zone { height: 10px; transition: 0.2s; }
-        .drop-zone.active { height: 40px; background: rgba(26, 115, 232, 0.1); border: 2px dashed var(--primary); margin: 5px 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 12px; }
-        .drop-zone.active::after { content: "放置於此"; }
+        .drop-marker { height: 4px; background: var(--primary); margin: 0; display: none; pointer-events: none; transition: 0.1s; position: relative; z-index: 100; border-radius: 2px; }
 
-        .element-wrapper { position: relative; border: 2px solid transparent; padding: 2px; group; }
+        .element-wrapper { position: relative; border: 2px solid transparent; padding: 2px; group; cursor: default; }
         .element-wrapper:hover { border-color: #e8f0fe; }
         .element-wrapper.selected { border-color: var(--primary); z-index: 2; }
 
@@ -76,17 +74,26 @@
         .action-btn { background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 4px 8px; }
         .action-btn:hover { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
+        /* Drag Handle */
+        .drag-handle { cursor: grab; background: rgba(0,0,0,0.1); padding: 0 8px; border-radius: 2px; margin-right: 4px; }
+
         /* Rendered Content Styles */
-        .wb-text { padding: 10px; line-height: 1.5; outline: none; }
+        .wb-text { padding: 10px; line-height: 1.5; outline: none; min-height: 1.5em; }
+        .wb-text:focus { outline: 2px solid rgba(26, 115, 232, 0.3); }
+
         .wb-btn-container { padding: 10px; text-align: left; }
         .wb-btn { display: inline-block; padding: 10px 24px; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; }
         .wb-img-container { padding: 10px; text-align: center; }
-        .wb-img { max-width: 100%; height: auto; display: block; }
+        .wb-img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
         .wb-video-container { padding: 10px; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
         .wb-video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .wb-divider { padding: 20px 10px; }
         .wb-divider hr { border: 0; border-top: 1px solid #dadce0; }
         .wb-embed-container { padding: 10px; overflow: hidden; }
+
+        /* Layouts */
+        .wb-columns { display: flex; gap: 20px; padding: 10px; }
+        .wb-column { flex: 1; border: 1px dashed #dadce0; padding: 10px; min-height: 50px; }
 
         /* Right Sidebar - Properties */
         .properties-panel { width: 300px; background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: 0; transition: transform 0.3s; }
@@ -99,10 +106,10 @@
         .color-picker-wrapper { display: flex; align-items: center; gap: 8px; }
         .color-picker { border: none; width: 40px; height: 40px; cursor: pointer; background: none; }
         .empty-state { padding: 40px 20px; text-align: center; color: #5f6368; font-size: 14px; }
+        .btn-full { width: 100%; margin-top: 8px; }
 
         /* Utilities */
         .hidden { display: none !important; }
-        .drag-ghost { opacity: 0.5; background: #e8f0fe; border: 2px solid var(--primary); width: 200px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -117,6 +124,9 @@
             <button class="btn-icon" onclick="setMode('mobile')" title="手機">📲</button>
         </div>
         <div class="actions">
+            <button class="btn-icon" onclick="undo()" title="復原 (Ctrl+Z)">↩️</button>
+            <button class="btn-icon" onclick="redo()" title="重做 (Ctrl+Y)">↪️</button>
+            <div style="width: 1px; height: 24px; background: #dadce0; margin: 0 8px;"></div>
             <button class="btn btn-outline" onclick="saveProject()">💾 儲存</button>
             <button class="btn btn-outline" onclick="shareProject()">🔗 分享</button>
             <button class="btn btn-primary" onclick="exportHTML()">📤 匯出網站</button>
@@ -128,38 +138,44 @@
         <aside class="sidebar">
             <div class="sidebar-title">插入元件</div>
             <div class="components-grid">
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'text')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'text')">
                     <div class="component-icon">T</div>
                     <span class="component-label">文字區塊</span>
                 </div>
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'image')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'image')">
                     <div class="component-icon">🖼️</div>
                     <span class="component-label">圖片</span>
                 </div>
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'button')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'button')">
                     <div class="component-icon">🔘</div>
                     <span class="component-label">按鈕</span>
                 </div>
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'video')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'video')">
                     <div class="component-icon">▶️</div>
                     <span class="component-label">YouTube</span>
                 </div>
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'divider')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'divider')">
                     <div class="component-icon">➖</div>
                     <span class="component-label">分隔線</span>
                 </div>
-                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'embed')">
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'embed')">
                     <div class="component-icon">🔗</div>
-                    <span class="component-label">嵌入程式碼</span>
+                    <span class="component-label">嵌入</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStartNew(event, 'layout2')">
+                    <div class="component-icon">❚❚</div>
+                    <span class="component-label">雙欄</span>
                 </div>
             </div>
         </aside>
 
         <!-- Canvas -->
         <main class="canvas-wrapper" onclick="deselectAll(event)">
-            <div id="canvas" class="canvas" data-mode="desktop" ondragover="dragOver(event)" ondrop="drop(event)">
+            <div id="canvas" class="canvas" data-mode="desktop" ondragover="dragOver(event)" ondrop="drop(event)" ondragleave="dragLeave(event)">
                 <!-- Elements will be injected here -->
             </div>
+            <!-- Visual Drop Marker -->
+            <div id="dropMarker" class="drop-marker"></div>
         </main>
 
         <!-- Properties Panel -->
@@ -174,8 +190,17 @@
         // --- State Management ---
         let projectData = [];
         let selectedId = null;
-        let dragType = null;
-        let dragIndex = null; // For reordering
+
+        // History Stack
+        let history = [];
+        let historyIndex = -1;
+        const MAX_HISTORY = 50;
+
+        // Drag State
+        let dragItemType = null; // 'new' or 'existing'
+        let draggedNewType = null;
+        let draggedExistingIndex = null;
+        let dropIndex = -1;
 
         // Initialize
         window.addEventListener('load', () => {
@@ -183,8 +208,11 @@
             if (saved) {
                 try {
                     projectData = JSON.parse(saved);
+                    pushHistory(true); // Initial state
                     renderCanvas();
                 } catch(e) { console.error("Load failed", e); }
+            } else {
+                pushHistory(true);
             }
 
             // Check for shared URL data
@@ -192,43 +220,165 @@
             const shared = urlParams.get('data');
             if(shared) {
                 try {
-                    projectData = JSON.parse(atob(shared));
+                    projectData = JSON.parse(decodeURIComponent(atob(shared)));
+                    pushHistory(true);
                     renderCanvas();
-                    // Clean URL
                     window.history.replaceState({}, document.title, window.location.pathname);
                 } catch(e) { console.error("Share load failed", e); }
             }
+
+            // Keyboard Shortcuts
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                    e.preventDefault();
+                    undo();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+            });
         });
 
+        // --- History System ---
+        function pushHistory(skipSave = false) {
+            // Remove future states if we are in the middle of history
+            if (historyIndex < history.length - 1) {
+                history = history.slice(0, historyIndex + 1);
+            }
+            history.push(JSON.parse(JSON.stringify(projectData)));
+            if (history.length > MAX_HISTORY) history.shift();
+            else historyIndex++;
+
+            if (!skipSave) saveLocal();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                projectData = JSON.parse(JSON.stringify(history[historyIndex]));
+                selectedId = null; // Deselect on undo to avoid ghost props
+                renderCanvas();
+                renderProperties();
+                saveLocal();
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                projectData = JSON.parse(JSON.stringify(history[historyIndex]));
+                selectedId = null;
+                renderCanvas();
+                renderProperties();
+                saveLocal();
+            }
+        }
+
         // --- Drag & Drop Logic ---
-        function dragStart(e, type) {
-            dragType = type;
-            dragIndex = null; // New item
+        function dragStartNew(e, type) {
+            dragItemType = 'new';
+            draggedNewType = type;
             e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', type); // For firefox
+        }
+
+        function dragStartExisting(e, index) {
+            dragItemType = 'existing';
+            draggedExistingIndex = index;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', index);
+            setTimeout(() => {
+                // e.target.style.opacity = '0.5';
+            }, 0);
         }
 
         function dragOver(e) {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
+            e.dataTransfer.dropEffect = dragItemType === 'new' ? 'copy' : 'move';
 
-            // Identify drop position logic could go here (highlighting lines)
-            // For simplicity, we just append or use closest logic later if needed
+            const canvas = document.getElementById('canvas');
+            const wrappers = Array.from(canvas.getElementsByClassName('element-wrapper'));
+
+            // Calculate insertion index
+            // Find the element that the mouse is over
+            let closestIndex = wrappers.length; // Default to end
+
+            for (let i = 0; i < wrappers.length; i++) {
+                const rect = wrappers[i].getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {
+                    closestIndex = i;
+                    break;
+                }
+            }
+
+            dropIndex = closestIndex;
+            showDropMarker(closestIndex, wrappers);
+        }
+
+        function showDropMarker(index, wrappers) {
+            const marker = document.getElementById('dropMarker');
+            marker.style.display = 'block';
+
+            const canvas = document.getElementById('canvas');
+            const canvasRect = canvas.getBoundingClientRect();
+
+            if (wrappers.length === 0) {
+                marker.style.top = canvasRect.top + 'px'; // not quite right but ok
+                // simpler: append to canvas
+                canvas.appendChild(marker);
+                return;
+            }
+
+            if (index < wrappers.length) {
+                // Insert before wrappers[index]
+                const target = wrappers[index];
+                canvas.insertBefore(marker, target);
+            } else {
+                // Append to end
+                canvas.appendChild(marker);
+            }
+        }
+
+        function dragLeave(e) {
+            // Hide marker if leaving the canvas area
+            // document.getElementById('dropMarker').style.display = 'none';
         }
 
         function drop(e) {
             e.preventDefault();
+            document.getElementById('dropMarker').style.display = 'none';
 
-            // If dropping on the canvas container or a gap
-            const newItem = createDefaultItem(dragType);
+            if (dragItemType === 'new') {
+                const newItem = createDefaultItem(draggedNewType);
+                // Insert at dropIndex
+                projectData.splice(dropIndex, 0, newItem);
+                selectedId = newItem.id;
+            } else if (dragItemType === 'existing') {
+                if (draggedExistingIndex === null) return;
 
-            // Logic to find insert index based on Y position could be added here
-            // For MVP, simply push to end
-            projectData.push(newItem);
+                // Adjust dropIndex if we are moving item downwards
+                let finalDropIndex = dropIndex;
+                if (draggedExistingIndex < dropIndex) {
+                    finalDropIndex--;
+                }
 
-            selectedId = newItem.id;
+                // Remove
+                const [item] = projectData.splice(draggedExistingIndex, 1);
+                // Insert
+                projectData.splice(finalDropIndex, 0, item);
+                selectedId = item.id;
+            }
+
+            pushHistory();
             renderCanvas();
             renderProperties();
-            saveLocal();
+
+            // Reset drag state
+            dragItemType = null;
+            draggedNewType = null;
+            draggedExistingIndex = null;
         }
 
         // --- Core Functions ---
@@ -250,6 +400,20 @@
                     return { ...base, style: { borderTop: '1px solid #dadce0', margin: '20px 0' } };
                 case 'embed':
                     return { ...base, content: '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSfD.../viewform?embedded=true" width="100%" height="600" frameborder="0" marginheight="0" marginwidth="0">Loading…</iframe>' };
+                case 'layout2':
+                     // Simplified layout: just 2 columns with placeholders?
+                     // Or just a container? For simplicity in this single-file builder,
+                     // We won't make nested sortables right now (too complex for MVP+).
+                     // We will insert a specialized HTML structure that isn't easily editable as individual blocks
+                     // BUT for "usable" UX, let's just make it a row with 2 text blocks for now.
+                     // Actually, supporting nested drag-drop is hard. Let's make it a fixed "2 Column Text" block.
+                     return {
+                         ...base,
+                         type: 'layout2',
+                         contentLeft: '<h3>左側欄位</h3><p>內容...</p>',
+                         contentRight: '<h3>右側欄位</h3><p>內容...</p>',
+                         style: { padding: '20px' }
+                     };
                 default:
                     return base;
             }
@@ -257,20 +421,38 @@
 
         function renderCanvas() {
             const canvas = document.getElementById('canvas');
+            // Keep the marker if it exists? No, re-render clears it.
             canvas.innerHTML = '';
+            // Re-append marker to be safe
+            const marker = document.createElement('div');
+            marker.id = 'dropMarker';
+            marker.className = 'drop-marker';
+            canvas.appendChild(marker);
 
             projectData.forEach((item, index) => {
                 const elWrapper = document.createElement('div');
                 elWrapper.className = `element-wrapper ${selectedId === item.id ? 'selected' : ''}`;
+                elWrapper.draggable = true;
+                elWrapper.ondragstart = (e) => {
+                    e.stopPropagation(); // Prevent parent drag
+                    dragStartExisting(e, index);
+                };
                 elWrapper.onclick = (e) => {
                     e.stopPropagation();
                     selectElement(item.id);
                 };
 
-                // Action Bar (Delete, Move Up/Down)
+                // Action Bar
                 const actions = document.createElement('div');
                 actions.className = 'element-actions';
-                actions.innerHTML = `
+
+                // Drag Handle Icon
+                const dragHandle = document.createElement('span');
+                dragHandle.innerHTML = '⋮⋮';
+                dragHandle.className = 'drag-handle';
+                actions.appendChild(dragHandle);
+
+                actions.innerHTML += `
                     <button class="action-btn" onclick="moveItem(${index}, -1)">⬆</button>
                     <button class="action-btn" onclick="moveItem(${index}, 1)">⬇</button>
                     <button class="action-btn" onclick="deleteItem('${item.id}')">🗑</button>
@@ -283,7 +465,17 @@
 
                 switch(item.type) {
                     case 'text':
-                        contentHtml = `<div class="wb-text" style="${styleStr}">${item.content}</div>`;
+                        // ContentEditable logic
+                        contentHtml = `<div class="wb-text" contenteditable="true"
+                            onblur="updateTextContent('${item.id}', this.innerHTML)"
+                            onmousedown="event.stopPropagation()"
+                            style="${styleStr}">${item.content}</div>`;
+                        break;
+                    case 'layout2':
+                        contentHtml = `<div class="wb-columns" style="${styleStr}">
+                            <div class="wb-column wb-text" contenteditable="true" onblur="updateDualContent('${item.id}', 'left', this.innerHTML)" onmousedown="event.stopPropagation()">${item.contentLeft}</div>
+                            <div class="wb-column wb-text" contenteditable="true" onblur="updateDualContent('${item.id}', 'right', this.innerHTML)" onmousedown="event.stopPropagation()">${item.contentRight}</div>
+                        </div>`;
                         break;
                     case 'button':
                         contentHtml = `<div class="wb-btn-container" style="text-align:${item.style.textAlign}">
@@ -294,7 +486,6 @@
                         contentHtml = `<div class="wb-img-container"><img src="${item.url}" class="wb-img" style="${styleStr}"></div>`;
                         break;
                     case 'video':
-                        // Only extracting ID if full URL provided, simple naive impl
                         let videoSrc = item.url;
                         if(videoSrc.includes('watch?v=')) videoSrc = videoSrc.replace('watch?v=', 'embed/');
                         contentHtml = `<div class="wb-video-container"><iframe src="${videoSrc}" frameborder="0" allowfullscreen></iframe></div>`;
@@ -316,16 +507,40 @@
 
         function styleObjToString(style) {
             return Object.entries(style).map(([k, v]) => {
-                // simple conversion camelCase to kebab-case
                 const key = k.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
                 return `${key}:${v}`;
             }).join(';');
+        }
+
+        // --- Editing Functions ---
+
+        function updateTextContent(id, newContent) {
+            const item = projectData.find(i => i.id === id);
+            if(item && item.content !== newContent) {
+                item.content = newContent;
+                pushHistory();
+                // No re-render needed for text blur, keeps focus logic simple
+            }
+        }
+
+        function updateDualContent(id, side, newContent) {
+             const item = projectData.find(i => i.id === id);
+             if(!item) return;
+             if(side === 'left' && item.contentLeft !== newContent) {
+                 item.contentLeft = newContent;
+                 pushHistory();
+             } else if(side === 'right' && item.contentRight !== newContent) {
+                 item.contentRight = newContent;
+                 pushHistory();
+             }
         }
 
         // --- Property Editor ---
 
         function selectElement(id) {
             selectedId = id;
+            // Don't full re-render if just selecting?
+            // We need to re-render to show selection border
             renderCanvas();
             renderProperties();
         }
@@ -350,12 +565,27 @@
 
             let html = `<div class="prop-header">編輯 ${getTypeName(item.type)}</div>`;
 
-            // Common Inputs based on type
-            if (item.type === 'text') {
-                html += createTextArea('內容 (HTML)', item.content, 'content');
-                html += createSelect('對齊', item.style.textAlign || 'left', 'style.textAlign', ['left', 'center', 'right']);
+            if (item.type === 'text' || item.type === 'layout2') {
+                html += `<div class="prop-group"><label class="prop-label">文字格式</label>
+                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('bold')"><b>B</b></button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('italic')"><i>I</i></button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('underline')"><u>U</u></button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('strikeThrough')"><s>S</s></button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('justifyLeft')">⬅</button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('justifyCenter')">↔</button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('justifyRight')">➡</button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('formatBlock', 'H2')">H2</button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('formatBlock', 'H3')">H3</button>
+                        <button class="btn btn-outline" style="padding:4px 8px;" onmousedown="event.preventDefault()" onclick="execCmd('formatBlock', 'P')">P</button>
+                    </div>
+                    <div style="margin-top:8px; font-size:12px; color:#666;">* 請在畫布中選取文字後點擊按鈕</div>
+                </div>`;
+
+                // Keep common styles
                 html += createColorInput('文字顏色', item.style.color || '#000000', 'style.color');
                 html += createInput('內距 (Padding)', item.style.padding || '20px', 'style.padding');
+
             } else if (item.type === 'button') {
                 html += createInput('按鈕文字', item.content, 'content');
                 html += createInput('連結 URL', item.url, 'url');
@@ -363,11 +593,16 @@
                 html += createColorInput('文字顏色', item.style.color || '#ffffff', 'style.color');
                 html += createSelect('對齊', item.style.textAlign || 'left', 'style.textAlign', ['left', 'center', 'right']);
                 html += createInput('圓角 (px)', item.style.borderRadius || '4px', 'style.borderRadius');
+
             } else if (item.type === 'image') {
+                html += `<div class="prop-group"><label class="prop-label">上傳圖片</label>
+                    <input type="file" accept="image/*" onchange="uploadImage(this)"></div>`;
                 html += createInput('圖片 URL', item.url, 'url');
                 html += createInput('寬度', item.style.width || '100%', 'style.width');
+
             } else if (item.type === 'video') {
                 html += createInput('YouTube URL', item.url, 'url');
+
             } else if (item.type === 'embed') {
                 html += createTextArea('嵌入程式碼 (HTML)', item.content, 'content');
             }
@@ -376,33 +611,51 @@
         }
 
         function getTypeName(type) {
-            const map = { text: '文字', button: '按鈕', image: '圖片', video: '影片', divider: '分隔線', embed: '嵌入' };
+            const map = { text: '文字', button: '按鈕', image: '圖片', video: '影片', divider: '分隔線', embed: '嵌入', layout2: '雙欄佈局' };
             return map[type] || type;
+        }
+
+        // --- Editor Commands ---
+        function execCmd(command, value = null) {
+            document.execCommand(command, false, value);
+            // We need to trigger the update manually because execCommand doesn't always fire blur immediately
+            // But the onblur on the element will catch it eventually.
+            // For immediate history update, we could check activeElement but it's complex.
+            // Relying on blur is standard for simple contenteditable.
         }
 
         // --- Property Helpers ---
         function createInput(label, value, key) {
             return `<div class="prop-group"><label class="prop-label">${label}</label>
-                <input class="prop-input" type="text" value="${value}" oninput="updateProp('${key}', this.value)"></div>`;
+                <input class="prop-input" type="text" value="${value}"
+                oninput="updateProp('${key}', this.value)"
+                onchange="pushHistory()"></div>`;
         }
 
         function createTextArea(label, value, key) {
             return `<div class="prop-group"><label class="prop-label">${label}</label>
-                <textarea class="prop-input" rows="5" oninput="updateProp('${key}', this.value)">${value}</textarea></div>`;
+                <textarea class="prop-input" rows="5"
+                oninput="updateProp('${key}', this.value)"
+                onchange="pushHistory()">
+                ${value}</textarea></div>`;
         }
 
         function createColorInput(label, value, key) {
             return `<div class="prop-group"><label class="prop-label">${label}</label>
                 <div class="color-picker-wrapper">
-                    <input type="color" class="color-picker" value="${value}" oninput="updateProp('${key}', this.value)">
-                    <input type="text" class="prop-input" value="${value}" oninput="updateProp('${key}', this.value)">
+                    <input type="color" class="color-picker" value="${value}"
+                    oninput="updateProp('${key}', this.value)"
+                    onchange="pushHistory()">
+                    <input type="text" class="prop-input" value="${value}"
+                    oninput="updateProp('${key}', this.value)"
+                    onchange="pushHistory()">
                 </div></div>`;
         }
 
         function createSelect(label, value, key, options) {
             const opts = options.map(o => `<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
             return `<div class="prop-group"><label class="prop-label">${label}</label>
-                <select class="prop-select" onchange="updateProp('${key}', this.value)">${opts}</select></div>`;
+                <select class="prop-select" onchange="updateProp('${key}', this.value); pushHistory();">${opts}</select></div>`;
         }
 
         function updateProp(path, value) {
@@ -418,6 +671,17 @@
             saveLocal();
         }
 
+        function uploadImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    updateProp('url', e.target.result);
+                    pushHistory();
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
         // --- Actions ---
 
         function moveItem(index, direction) {
@@ -425,6 +689,7 @@
             const temp = projectData[index];
             projectData[index] = projectData[index + direction];
             projectData[index + direction] = temp;
+            pushHistory();
             renderCanvas();
             saveLocal();
         }
@@ -433,6 +698,7 @@
             if(!confirm('確定要刪除此元件嗎？')) return;
             projectData = projectData.filter(i => i.id !== id);
             selectedId = null;
+            pushHistory();
             renderCanvas();
             renderProperties();
             saveLocal();
@@ -455,15 +721,13 @@
 
         function shareProject() {
             const json = JSON.stringify(projectData);
-            const b64 = btoa(json);
+            const b64 = btoa(encodeURIComponent(json)); // Fix unicode issues
             const url = window.location.origin + window.location.pathname + '?data=' + b64;
             navigator.clipboard.writeText(url).then(() => alert('分享連結已複製到剪貼簿！'));
         }
 
         function exportHTML() {
-            // Generate clean HTML
             const canvasContent = document.getElementById('canvas').innerHTML;
-            // We need to re-generate strictly clean content without edit wrappers
             let cleanBody = '';
 
             projectData.forEach(item => {
@@ -471,6 +735,12 @@
                 let inner = '';
                 switch(item.type) {
                     case 'text': inner = `<div style="${styleStr}">${item.content}</div>`; break;
+                    case 'layout2':
+                         inner = `<div style="display:flex; gap:20px; ${styleStr}">
+                            <div style="flex:1;">${item.contentLeft}</div>
+                            <div style="flex:1;">${item.contentRight}</div>
+                         </div>`;
+                         break;
                     case 'button':
                         inner = `<div style="text-align:${item.style.textAlign}; padding: 10px;">
                                     <a href="${item.url}" style="display:inline-block; padding:10px 24px; text-decoration:none; background:${item.style.backgroundColor}; color:${item.style.color}; border-radius:${item.style.borderRadius}">${item.content}</a>
@@ -494,7 +764,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Website</title>
-    <style>body{margin:0;font-family:sans-serif;line-height:1.6;color:#202124;} *{box-sizing:border-box;}</style>
+    <style>body{margin:0;font-family:sans-serif;line-height:1.6;color:#202124;} *{box-sizing:border-box;} img{max-width:100%;height:auto;}</style>
 </head>
 <body>
     ${cleanBody}
