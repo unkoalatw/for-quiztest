@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sites Clone - No Code Builder</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --bg-gray: #f0f2f5;
+            --border: #dadce0;
+            --surface: #ffffff;
+            --text: #202124;
+        }
+
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Google Sans', Roboto, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--bg-gray); color: var(--text); }
+
+        /* Top Toolbar */
+        header {
+            height: 64px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); z-index: 10;
+        }
+        .brand { font-size: 20px; font-weight: 500; display: flex; align-items: center; gap: 8px; color: #5f6368; }
+        .brand span { color: var(--primary); font-weight: bold; }
+        .device-toggles { display: flex; background: #f1f3f4; padding: 4px; border-radius: 8px; gap: 4px; }
+        .btn-icon { border: none; background: transparent; padding: 8px; border-radius: 4px; cursor: pointer; color: #5f6368; }
+        .btn-icon.active { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.1); color: var(--primary); }
+        .actions { display: flex; gap: 12px; }
+        .btn { padding: 8px 24px; border-radius: 4px; border: none; cursor: pointer; font-weight: 500; font-size: 14px; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #1557b0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .btn-outline { background: white; border: 1px solid var(--border); color: var(--primary); }
+
+        /* Main Workspace */
+        .workspace { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+        /* Left Sidebar - Components */
+        .sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 5; }
+        .sidebar-title { padding: 16px; font-size: 14px; font-weight: 500; color: #5f6368; border-bottom: 1px solid var(--border); }
+        .components-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; overflow-y: auto; }
+        .component-card {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+            padding: 16px 8px; background: #fff; border: 1px solid var(--border); border-radius: 8px;
+            cursor: grab; transition: 0.2s; user-select: none;
+        }
+        .component-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-color: transparent; transform: translateY(-2px); }
+        .component-icon { width: 24px; height: 24px; background: #e8f0fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary); font-weight: bold; font-size: 12px; }
+        .component-label { font-size: 12px; color: #3c4043; }
+
+        /* Center Canvas */
+        .canvas-wrapper { flex: 1; background: #e8eaed; display: flex; justify-content: center; overflow-y: auto; padding: 40px; position: relative; transition: 0.3s; }
+        .canvas {
+            background: white; min-height: 800px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: width 0.3s ease; position: relative; display: flex; flex-direction: column;
+        }
+        /* Device Modes */
+        .canvas[data-mode="desktop"] { width: 100%; max-width: 1200px; }
+        .canvas[data-mode="tablet"] { width: 768px; }
+        .canvas[data-mode="mobile"] { width: 375px; }
+
+        /* Canvas Elements */
+        .drop-zone { height: 10px; transition: 0.2s; }
+        .drop-zone.active { height: 40px; background: rgba(26, 115, 232, 0.1); border: 2px dashed var(--primary); margin: 5px 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 12px; }
+        .drop-zone.active::after { content: "放置於此"; }
+
+        .element-wrapper { position: relative; border: 2px solid transparent; padding: 2px; group; }
+        .element-wrapper:hover { border-color: #e8f0fe; }
+        .element-wrapper.selected { border-color: var(--primary); z-index: 2; }
+
+        /* Action Buttons on Element */
+        .element-actions {
+            position: absolute; right: 0; top: -30px; background: var(--primary); color: white;
+            border-radius: 4px; display: none; padding: 4px; gap: 4px; z-index: 10;
+        }
+        .element-wrapper.selected .element-actions { display: flex; }
+        .action-btn { background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 4px 8px; }
+        .action-btn:hover { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        /* Rendered Content Styles */
+        .wb-text { padding: 10px; line-height: 1.5; outline: none; }
+        .wb-btn-container { padding: 10px; text-align: left; }
+        .wb-btn { display: inline-block; padding: 10px 24px; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; }
+        .wb-img-container { padding: 10px; text-align: center; }
+        .wb-img { max-width: 100%; height: auto; display: block; }
+        .wb-video-container { padding: 10px; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
+        .wb-video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .wb-divider { padding: 20px 10px; }
+        .wb-divider hr { border: 0; border-top: 1px solid #dadce0; }
+        .wb-embed-container { padding: 10px; overflow: hidden; }
+
+        /* Right Sidebar - Properties */
+        .properties-panel { width: 300px; background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: 0; transition: transform 0.3s; }
+        .prop-header { padding: 16px; border-bottom: 1px solid var(--border); font-weight: 500; background: #f8f9fa; }
+        .prop-group { padding: 16px; border-bottom: 1px solid var(--border); }
+        .prop-label { display: block; font-size: 12px; color: #5f6368; margin-bottom: 8px; font-weight: 500; }
+        .prop-input, .prop-select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; margin-bottom: 12px; }
+        .prop-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+        .prop-row { display: flex; gap: 8px; }
+        .color-picker-wrapper { display: flex; align-items: center; gap: 8px; }
+        .color-picker { border: none; width: 40px; height: 40px; cursor: pointer; background: none; }
+        .empty-state { padding: 40px 20px; text-align: center; color: #5f6368; font-size: 14px; }
+
+        /* Utilities */
+        .hidden { display: none !important; }
+        .drag-ghost { opacity: 0.5; background: #e8f0fe; border: 2px solid var(--primary); width: 200px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <span>Sites</span> Builder
+        </div>
+        <div class="device-toggles">
+            <button class="btn-icon active" onclick="setMode('desktop')" title="桌面版">🖥️</button>
+            <button class="btn-icon" onclick="setMode('tablet')" title="平板">📱</button>
+            <button class="btn-icon" onclick="setMode('mobile')" title="手機">📲</button>
+        </div>
+        <div class="actions">
+            <button class="btn btn-outline" onclick="saveProject()">💾 儲存</button>
+            <button class="btn btn-outline" onclick="shareProject()">🔗 分享</button>
+            <button class="btn btn-primary" onclick="exportHTML()">📤 匯出網站</button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Components Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-title">插入元件</div>
+            <div class="components-grid">
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'text')">
+                    <div class="component-icon">T</div>
+                    <span class="component-label">文字區塊</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'image')">
+                    <div class="component-icon">🖼️</div>
+                    <span class="component-label">圖片</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'button')">
+                    <div class="component-icon">🔘</div>
+                    <span class="component-label">按鈕</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'video')">
+                    <div class="component-icon">▶️</div>
+                    <span class="component-label">YouTube</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'divider')">
+                    <div class="component-icon">➖</div>
+                    <span class="component-label">分隔線</span>
+                </div>
+                <div class="component-card" draggable="true" ondragstart="dragStart(event, 'embed')">
+                    <div class="component-icon">🔗</div>
+                    <span class="component-label">嵌入程式碼</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas -->
+        <main class="canvas-wrapper" onclick="deselectAll(event)">
+            <div id="canvas" class="canvas" data-mode="desktop" ondragover="dragOver(event)" ondrop="drop(event)">
+                <!-- Elements will be injected here -->
+            </div>
+        </main>
+
+        <!-- Properties Panel -->
+        <aside class="properties-panel" id="propertiesPanel">
+            <div class="empty-state">
+                請選擇畫布上的元件<br>進行編輯
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let projectData = [];
+        let selectedId = null;
+        let dragType = null;
+        let dragIndex = null; // For reordering
+
+        // Initialize
+        window.addEventListener('load', () => {
+            const saved = localStorage.getItem('siteBuilderData');
+            if (saved) {
+                try {
+                    projectData = JSON.parse(saved);
+                    renderCanvas();
+                } catch(e) { console.error("Load failed", e); }
+            }
+
+            // Check for shared URL data
+            const urlParams = new URLSearchParams(window.location.search);
+            const shared = urlParams.get('data');
+            if(shared) {
+                try {
+                    projectData = JSON.parse(atob(shared));
+                    renderCanvas();
+                    // Clean URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch(e) { console.error("Share load failed", e); }
+            }
+        });
+
+        // --- Drag & Drop Logic ---
+        function dragStart(e, type) {
+            dragType = type;
+            dragIndex = null; // New item
+            e.dataTransfer.effectAllowed = 'copy';
+        }
+
+        function dragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+
+            // Identify drop position logic could go here (highlighting lines)
+            // For simplicity, we just append or use closest logic later if needed
+        }
+
+        function drop(e) {
+            e.preventDefault();
+
+            // If dropping on the canvas container or a gap
+            const newItem = createDefaultItem(dragType);
+
+            // Logic to find insert index based on Y position could be added here
+            // For MVP, simply push to end
+            projectData.push(newItem);
+
+            selectedId = newItem.id;
+            renderCanvas();
+            renderProperties();
+            saveLocal();
+        }
+
+        // --- Core Functions ---
+
+        function createDefaultItem(type) {
+            const id = 'el_' + Date.now() + Math.random().toString(36).substr(2, 5);
+            const base = { id, type, style: {} };
+
+            switch(type) {
+                case 'text':
+                    return { ...base, content: '<h2>請輸入標題</h2><p>在這裡輸入您的文字內容...</p>', style: { textAlign: 'left', color: '#000000', padding: '20px' } };
+                case 'button':
+                    return { ...base, content: '點擊這裡', url: '#', style: { backgroundColor: '#1a73e8', color: '#ffffff', fontSize: '16px', borderRadius: '4px', textAlign: 'left' } };
+                case 'image':
+                    return { ...base, url: 'https://via.placeholder.com/800x400?text=Image+Placeholder', style: { width: '100%', borderRadius: '0px' } };
+                case 'video':
+                    return { ...base, url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', style: { width: '100%' } };
+                case 'divider':
+                    return { ...base, style: { borderTop: '1px solid #dadce0', margin: '20px 0' } };
+                case 'embed':
+                    return { ...base, content: '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSfD.../viewform?embedded=true" width="100%" height="600" frameborder="0" marginheight="0" marginwidth="0">Loading…</iframe>' };
+                default:
+                    return base;
+            }
+        }
+
+        function renderCanvas() {
+            const canvas = document.getElementById('canvas');
+            canvas.innerHTML = '';
+
+            projectData.forEach((item, index) => {
+                const elWrapper = document.createElement('div');
+                elWrapper.className = `element-wrapper ${selectedId === item.id ? 'selected' : ''}`;
+                elWrapper.onclick = (e) => {
+                    e.stopPropagation();
+                    selectElement(item.id);
+                };
+
+                // Action Bar (Delete, Move Up/Down)
+                const actions = document.createElement('div');
+                actions.className = 'element-actions';
+                actions.innerHTML = `
+                    <button class="action-btn" onclick="moveItem(${index}, -1)">⬆</button>
+                    <button class="action-btn" onclick="moveItem(${index}, 1)">⬇</button>
+                    <button class="action-btn" onclick="deleteItem('${item.id}')">🗑</button>
+                `;
+                elWrapper.appendChild(actions);
+
+                // Content
+                let contentHtml = '';
+                const styleStr = styleObjToString(item.style);
+
+                switch(item.type) {
+                    case 'text':
+                        contentHtml = `<div class="wb-text" style="${styleStr}">${item.content}</div>`;
+                        break;
+                    case 'button':
+                        contentHtml = `<div class="wb-btn-container" style="text-align:${item.style.textAlign}">
+                            <a href="${item.url || '#'}" class="wb-btn" style="background-color:${item.style.backgroundColor}; color:${item.style.color}; font-size:${item.style.fontSize}; border-radius:${item.style.borderRadius}">${item.content}</a>
+                        </div>`;
+                        break;
+                    case 'image':
+                        contentHtml = `<div class="wb-img-container"><img src="${item.url}" class="wb-img" style="${styleStr}"></div>`;
+                        break;
+                    case 'video':
+                        // Only extracting ID if full URL provided, simple naive impl
+                        let videoSrc = item.url;
+                        if(videoSrc.includes('watch?v=')) videoSrc = videoSrc.replace('watch?v=', 'embed/');
+                        contentHtml = `<div class="wb-video-container"><iframe src="${videoSrc}" frameborder="0" allowfullscreen></iframe></div>`;
+                        break;
+                    case 'divider':
+                        contentHtml = `<div class="wb-divider"><hr style="border-top: 1px solid #dadce0"></div>`;
+                        break;
+                    case 'embed':
+                        contentHtml = `<div class="wb-embed-container">${item.content}</div>`;
+                        break;
+                }
+
+                const contentDiv = document.createElement('div');
+                contentDiv.innerHTML = contentHtml;
+                elWrapper.appendChild(contentDiv);
+                canvas.appendChild(elWrapper);
+            });
+        }
+
+        function styleObjToString(style) {
+            return Object.entries(style).map(([k, v]) => {
+                // simple conversion camelCase to kebab-case
+                const key = k.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+                return `${key}:${v}`;
+            }).join(';');
+        }
+
+        // --- Property Editor ---
+
+        function selectElement(id) {
+            selectedId = id;
+            renderCanvas();
+            renderProperties();
+        }
+
+        function deselectAll(e) {
+            if (e.target.classList.contains('canvas-wrapper') || e.target.id === 'canvas') {
+                selectedId = null;
+                renderCanvas();
+                renderProperties();
+            }
+        }
+
+        function renderProperties() {
+            const panel = document.getElementById('propertiesPanel');
+            if (!selectedId) {
+                panel.innerHTML = '<div class="empty-state">請選擇畫布上的元件<br>進行編輯</div>';
+                return;
+            }
+
+            const item = projectData.find(i => i.id === selectedId);
+            if (!item) return;
+
+            let html = `<div class="prop-header">編輯 ${getTypeName(item.type)}</div>`;
+
+            // Common Inputs based on type
+            if (item.type === 'text') {
+                html += createTextArea('內容 (HTML)', item.content, 'content');
+                html += createSelect('對齊', item.style.textAlign || 'left', 'style.textAlign', ['left', 'center', 'right']);
+                html += createColorInput('文字顏色', item.style.color || '#000000', 'style.color');
+                html += createInput('內距 (Padding)', item.style.padding || '20px', 'style.padding');
+            } else if (item.type === 'button') {
+                html += createInput('按鈕文字', item.content, 'content');
+                html += createInput('連結 URL', item.url, 'url');
+                html += createColorInput('背景顏色', item.style.backgroundColor || '#1a73e8', 'style.backgroundColor');
+                html += createColorInput('文字顏色', item.style.color || '#ffffff', 'style.color');
+                html += createSelect('對齊', item.style.textAlign || 'left', 'style.textAlign', ['left', 'center', 'right']);
+                html += createInput('圓角 (px)', item.style.borderRadius || '4px', 'style.borderRadius');
+            } else if (item.type === 'image') {
+                html += createInput('圖片 URL', item.url, 'url');
+                html += createInput('寬度', item.style.width || '100%', 'style.width');
+            } else if (item.type === 'video') {
+                html += createInput('YouTube URL', item.url, 'url');
+            } else if (item.type === 'embed') {
+                html += createTextArea('嵌入程式碼 (HTML)', item.content, 'content');
+            }
+
+            panel.innerHTML = html;
+        }
+
+        function getTypeName(type) {
+            const map = { text: '文字', button: '按鈕', image: '圖片', video: '影片', divider: '分隔線', embed: '嵌入' };
+            return map[type] || type;
+        }
+
+        // --- Property Helpers ---
+        function createInput(label, value, key) {
+            return `<div class="prop-group"><label class="prop-label">${label}</label>
+                <input class="prop-input" type="text" value="${value}" oninput="updateProp('${key}', this.value)"></div>`;
+        }
+
+        function createTextArea(label, value, key) {
+            return `<div class="prop-group"><label class="prop-label">${label}</label>
+                <textarea class="prop-input" rows="5" oninput="updateProp('${key}', this.value)">${value}</textarea></div>`;
+        }
+
+        function createColorInput(label, value, key) {
+            return `<div class="prop-group"><label class="prop-label">${label}</label>
+                <div class="color-picker-wrapper">
+                    <input type="color" class="color-picker" value="${value}" oninput="updateProp('${key}', this.value)">
+                    <input type="text" class="prop-input" value="${value}" oninput="updateProp('${key}', this.value)">
+                </div></div>`;
+        }
+
+        function createSelect(label, value, key, options) {
+            const opts = options.map(o => `<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
+            return `<div class="prop-group"><label class="prop-label">${label}</label>
+                <select class="prop-select" onchange="updateProp('${key}', this.value)">${opts}</select></div>`;
+        }
+
+        function updateProp(path, value) {
+            const item = projectData.find(i => i.id === selectedId);
+            if (!item) return;
+
+            if (path.startsWith('style.')) {
+                item.style[path.split('.')[1]] = value;
+            } else {
+                item[path] = value;
+            }
+            renderCanvas();
+            saveLocal();
+        }
+
+        // --- Actions ---
+
+        function moveItem(index, direction) {
+            if (index + direction < 0 || index + direction >= projectData.length) return;
+            const temp = projectData[index];
+            projectData[index] = projectData[index + direction];
+            projectData[index + direction] = temp;
+            renderCanvas();
+            saveLocal();
+        }
+
+        function deleteItem(id) {
+            if(!confirm('確定要刪除此元件嗎？')) return;
+            projectData = projectData.filter(i => i.id !== id);
+            selectedId = null;
+            renderCanvas();
+            renderProperties();
+            saveLocal();
+        }
+
+        function saveLocal() {
+            localStorage.setItem('siteBuilderData', JSON.stringify(projectData));
+        }
+
+        function saveProject() {
+            saveLocal();
+            alert('專案已儲存至瀏覽器！');
+        }
+
+        function setMode(mode) {
+            document.getElementById('canvas').dataset.mode = mode;
+            document.querySelectorAll('.device-toggles button').forEach(b => b.classList.remove('active'));
+            document.querySelector(`button[onclick="setMode('${mode}')"]`).classList.add('active');
+        }
+
+        function shareProject() {
+            const json = JSON.stringify(projectData);
+            const b64 = btoa(json);
+            const url = window.location.origin + window.location.pathname + '?data=' + b64;
+            navigator.clipboard.writeText(url).then(() => alert('分享連結已複製到剪貼簿！'));
+        }
+
+        function exportHTML() {
+            // Generate clean HTML
+            const canvasContent = document.getElementById('canvas').innerHTML;
+            // We need to re-generate strictly clean content without edit wrappers
+            let cleanBody = '';
+
+            projectData.forEach(item => {
+                const styleStr = styleObjToString(item.style);
+                let inner = '';
+                switch(item.type) {
+                    case 'text': inner = `<div style="${styleStr}">${item.content}</div>`; break;
+                    case 'button':
+                        inner = `<div style="text-align:${item.style.textAlign}; padding: 10px;">
+                                    <a href="${item.url}" style="display:inline-block; padding:10px 24px; text-decoration:none; background:${item.style.backgroundColor}; color:${item.style.color}; border-radius:${item.style.borderRadius}">${item.content}</a>
+                                 </div>`;
+                        break;
+                    case 'image': inner = `<div style="text-align:center; padding:10px;"><img src="${item.url}" style="${styleStr}"></div>`; break;
+                    case 'video':
+                         let videoSrc = item.url;
+                         if(videoSrc.includes('watch?v=')) videoSrc = videoSrc.replace('watch?v=', 'embed/');
+                         inner = `<div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden;"><iframe style="position:absolute; top:0; left:0; width:100%; height:100%;" src="${videoSrc}" frameborder="0" allowfullscreen></iframe></div>`;
+                         break;
+                    case 'divider': inner = `<div style="padding:20px 0;"><hr style="border:0; border-top:1px solid #dadce0;"></div>`; break;
+                    case 'embed': inner = `<div>${item.content}</div>`; break;
+                }
+                cleanBody += `<section style="max-width: 960px; margin: 0 auto; padding: 10px;">${inner}</section>`;
+            });
+
+            const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Website</title>
+    <style>body{margin:0;font-family:sans-serif;line-height:1.6;color:#202124;} *{box-sizing:border-box;}</style>
+</head>
+<body>
+    ${cleanBody}
+</body>
+</html>`;
+
+            const blob = new Blob([html], {type: 'text/html'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'website.html';
+            a.click();
+        }
+    </script>
+</body>
+</html>
